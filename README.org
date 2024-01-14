@@ -1,0 +1,5 @@
+* The Sun Also Rises
+
+To start:
+
+: clj -M:run
