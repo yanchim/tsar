@@ -4,36 +4,66 @@
    [main.middlewares :as middlewares]
    [muuntaja.core :as m]
    [reitit.coercion.spec :as rcs]
+   [reitit.openapi :as openapi]
    [reitit.ring :as ring]
    [reitit.ring.coercion :as rrc]
+   [reitit.ring.middleware.exception :as exception]
    [reitit.ring.middleware.muuntaja :as muuntaja]
    [reitit.ring.middleware.parameters :as parameters]
-   [ring.adapter.jetty :refer [run-jetty]]
-   [ring.util.response :as rur]))
+   [reitit.swagger :as swagger]
+   [reitit.swagger-ui :as swagger-ui]
+   [ring.adapter.jetty :refer [run-jetty]]))
 
 (s/def :sub/name string?)
 (s/def :sub/mobile boolean?)
 (s/def :sub/cn boolean?)
 
-(s/def :sub/info (s/keys :req-un [:sub/name]
-                         :opt-un [:sub/mobile :sub/cn]))
+(s/def :sub/request (s/keys :req-un [:sub/name]
+                            :opt-un [:sub/mobile :sub/cn]))
+(s/def :sub/response (s/keys :req-un [:sub/name :sub/mobile :sub/cn]))
 
-(defn- subscribe [request]
+(defn- subscribe-get [request]
   (let [params (-> request :parameters :query)]
-    (rur/response {:name    (:name params)
-                   :mobile? (:mobile params)
-                   :cn?     (:cn params)})))
+    {:status 200
+     :body   {:name   (:name params)
+              :mobile (:mobile params false)
+              :cn     (:cn params false)}}))
 
-(defn- hello [_]
-  (rur/response {:hello "world"}))
+(defn- subscribe-post [request]
+  (let [params (-> request :parameters :body)]
+    {:status 200
+     :body   {:name   (:name params)
+              :mobile (:mobile params false)
+              :cn     (:cn params false)}}))
+
+(defn- ping [_]
+  {:status 200
+   :body {:hello "world"}})
 
 (def root-routes
-  ["/" {:get hello}])
+  ["" {:no-doc true}
+   ["/" {:get ping}]
+   ["/swagger.json" {:get {:swagger {:info {:title "swagger"
+                                            :description "swagger with reitit"
+                                            :version "0.1.0"}}
+                           :handler (swagger/create-swagger-handler)}}]
+   ["/openapi.json"
+    {:get {:openapi {:info {:title       "openapi"
+                            :description "openapi3-docs with reitit"
+                            :version     "0.1.0"}}
+           :handler (openapi/create-openapi-handler)}}]
+   ["/api*" {:get (swagger-ui/create-swagger-ui-handler)}]])
 
 (def subsribe-routes
   ["/subscribe" {:name ::subscribe
-                 :get  {:parameters {:query :sub/info}
-                        :handler    subscribe}}])
+                 :get  {:summary    "Get subscribe json with spec query parameters"
+                        :parameters {:query :sub/request}
+                        :responses  {200 {:body :sub/response}}
+                        :handler    subscribe-get}
+                 :post {:summary    "Get subscribe json with spec body parameters"
+                        :parameters {:body :sub/request}
+                        :responses  {200 {:body :sub/response}}
+                        :handler subscribe-post}}])
 
 (defn- create-ring-handler []
   (ring/ring-handler
@@ -43,10 +73,22 @@
     ;; router data affecting all routes
     {:data {:coercion   rcs/coercion
             :muuntaja   m/instance
-            :middleware [parameters/parameters-middleware
-                         rrc/coerce-request-middleware
+            :middleware [;; swagger feature
+                         swagger/swagger-feature
+                         ;; query-params & form-params
+                         parameters/parameters-middleware
+                         ;; content-negotiation
+                         muuntaja/format-negotiate-middleware
+                         ;; encoding response body
                          muuntaja/format-response-middleware
-                         rrc/coerce-response-middleware]}})))
+                         ;; exception handling
+                         exception/exception-middleware
+                         ;; decoding request body
+                         muuntaja/format-request-middleware
+                         ;; coercing response bodys
+                         rrc/coerce-response-middleware
+                         ;; coercing request parameters
+                         rrc/coerce-request-middleware]}})))
 
 (defn start [options]
   (let [create-handler-fn #(create-ring-handler)
