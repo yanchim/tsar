@@ -1,5 +1,6 @@
 (ns main.server
   (:require
+   [clojure.edn :as edn]
    [clojure.spec.alpha :as s]
    [main.middlewares :as middlewares]
    [muuntaja.core :as m]
@@ -14,27 +15,71 @@
    [reitit.swagger-ui :as swagger-ui]
    [ring.adapter.jetty :refer [run-jetty]]))
 
+(defonce data (let [prefix "data/"]
+                {:default (str prefix "client.edn")
+                 :cn (str prefix "client-cn.edn")
+                 :cnmobile (str prefix "client-cnmobile.edn")
+                 :mobile (str prefix "client-mobile.edn")
+                 :password (str prefix "password.edn")}))
+
 (s/def :sub/name string?)
 (s/def :sub/mobile boolean?)
 (s/def :sub/cn boolean?)
 
 (s/def :sub/request (s/keys :req-un [:sub/name]
                             :opt-un [:sub/mobile :sub/cn]))
-(s/def :sub/response (s/keys :req-un [:sub/name :sub/mobile :sub/cn]))
 
 (defn- subscribe-get [request]
-  (let [params (-> request :parameters :query)]
-    {:status 200
-     :body   {:name   (:name params)
-              :mobile (:mobile params false)
-              :cn     (:cn params false)}}))
+  (let [{:keys [name mobile cn]} (-> request :parameters :query)
+        config (cond
+                 (and mobile cn)
+                 (-> (:cnmobile data) slurp edn/read-string)
+                 mobile
+                 (-> (:mobile data) slurp edn/read-string)
+                 cn
+                 (-> (:cn data) slurp edn/read-string)
+                 :else
+                 (-> (:default data) slurp edn/read-string))
+        password ((keyword name) (-> (:password data) slurp edn/read-string))]
+    (if cn
+      {:status 200
+       :body config}
+      {:status 200
+       :body (update-in
+              config
+              [:outbounds]
+              (fn [outbounds]
+                (map (fn [outbound]
+                       (if (= (:type outbound) "shadowtls")
+                         (assoc outbound :password password)
+                         outbound))
+                     outbounds)))})))
 
 (defn- subscribe-post [request]
-  (let [params (-> request :parameters :body)]
-    {:status 200
-     :body   {:name   (:name params)
-              :mobile (:mobile params false)
-              :cn     (:cn params false)}}))
+  (let [{:keys [name mobile cn]} (-> request :parameters :body)
+        config (cond
+                 (and mobile cn)
+                 (-> (:cnmobile data) slurp edn/read-string)
+                 mobile
+                 (-> (:mobile data) slurp edn/read-string)
+                 cn
+                 (-> (:cn data) slurp edn/read-string)
+                 :else
+                 (-> (:default data) slurp edn/read-string))
+        password ((keyword name) (-> (:password data) slurp edn/read-string))]
+    (if cn
+      {:status 200
+       :body config}
+      {:status 200
+       :body (update-in
+              config
+              [:outbounds]
+              (fn [outbounds]
+                (map (fn [outbound]
+                       (if (= (:type outbound) "shadowtls")
+                         (assoc outbound :password password)
+                         outbound))
+                     outbounds)))})))
 
 (defn- ping [_]
   {:status 200
@@ -58,11 +103,11 @@
   ["/subscribe" {:name ::subscribe
                  :get  {:summary    "Get subscribe json with spec query parameters"
                         :parameters {:query :sub/request}
-                        :responses  {200 {:body :sub/response}}
+                        :responses  {200 {}}
                         :handler    subscribe-get}
                  :post {:summary    "Get subscribe json with spec body parameters"
                         :parameters {:body :sub/request}
-                        :responses  {200 {:body :sub/response}}
+                        :responses  {200 {}}
                         :handler subscribe-post}}])
 
 (defn- create-ring-handler []
@@ -105,3 +150,9 @@
 (defn status [_options]
   (println :status)
   :status)
+
+(defn- repl-test
+  "For repl test only."
+  [& {:keys [port]
+      :or   {port 3000}}]
+  (start {:dev true :port port}))
