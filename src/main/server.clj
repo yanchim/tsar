@@ -3,6 +3,7 @@
    [clojure.edn :as edn]
    [clojure.spec.alpha :as s]
    [main.middlewares :as middlewares]
+   [main.websocket :as mw]
    [muuntaja.core :as m]
    [reitit.coercion.spec :as rcs]
    [reitit.openapi :as openapi]
@@ -110,11 +111,17 @@
                         :responses  {200 {}}
                         :handler subscribe-post}}])
 
+(def ws-route
+  ["/chat" {:name ::websocket
+            :get {:summary "WebSocket for chatting"
+                  :handler mw/echo-handler}}])
+
 (defn- create-ring-handler []
   (ring/ring-handler
    (ring/router
     [root-routes
-     subsribe-routes]
+     subsribe-routes
+     ws-route]
     ;; router data affecting all routes
     {:data {:coercion   rcs/coercion
             :muuntaja   m/instance
