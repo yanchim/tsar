@@ -3,8 +3,11 @@
    [clojure.edn :as edn]
    [clojure.spec.alpha :as s]
    [main.middlewares :as middlewares]
-   [main.websocket :as mw]
+   [main.websocket :as ws]
    [muuntaja.core :as m]
+   [org.httpkit.server :as hks]
+   [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+   [ring.middleware.params :refer [wrap-params]]
    [reitit.coercion.spec :as rcs]
    [reitit.openapi :as openapi]
    [reitit.ring :as ring]
@@ -13,8 +16,7 @@
    [reitit.ring.middleware.muuntaja :as muuntaja]
    [reitit.ring.middleware.parameters :as parameters]
    [reitit.swagger :as swagger]
-   [reitit.swagger-ui :as swagger-ui]
-   [ring.adapter.jetty :refer [run-jetty]]))
+   [reitit.swagger-ui :as swagger-ui]))
 
 (defonce data (let [prefix "data/"]
                 {:default (str prefix "client.edn")
@@ -114,7 +116,9 @@
 (def ws-route
   ["/chat" {:name ::websocket
             :get {:summary "WebSocket for chatting"
-                  :handler mw/echo-handler}}])
+                  :handler ws/ring-ajax-get-or-ws-handshake}
+            :post {:summary "WebSocket for chatting"
+                   :handler ws/ring-ajax-post}}])
 
 (defn- create-ring-handler []
   (ring/ring-handler
@@ -127,6 +131,10 @@
             :muuntaja   m/instance
             :middleware [;; swagger feature
                          swagger/swagger-feature
+                         ;; for websockets (sente looks for the
+                         ;; `:param` key in the request map)
+                         wrap-params
+                         wrap-keyword-params
                          ;; query-params & form-params
                          parameters/parameters-middleware
                          ;; content-negotiation
@@ -148,7 +156,7 @@
                    (middlewares/reloading-ring-handler create-handler-fn)
                    (create-handler-fn))]
     (println "Server running on port" (:port options))
-    (run-jetty handler* {:port (:port options) :join? false})))
+    (hks/run-server handler* {:port (:port options) :join? false})))
 
 (defn stop [_options]
   (println :stop)

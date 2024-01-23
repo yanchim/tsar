@@ -1,18 +1,13 @@
 (ns main.websocket
-  (:require [ring.websocket :as ws]))
+  (:require [taoensso.sente :as sente]
+            [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]))
 
-(defn echo-handler [request]
-  {::ws/listener
-   {:on-open
-    #(ws/send % "I will echo your messages")
-    :on-error
-    (fn [socket throwable]
-      (ws/send socket throwable))
-    :on-close
-    (fn [socket code reason]
-      (ws/send socket {:code code :reason reason}))
-    :on-message
-    (fn [socket message]
-      (if (= message "exit")
-        (ws/close socket)
-        (ws/send socket message)))}})
+(let [{:keys [ch-recv send-fn connected-uids
+              ajax-post-fn ajax-get-or-ws-handshake-fn]}
+      (sente/make-channel-socket-server! (get-sch-adapter) {})]
+  (def ring-ajax-post                ajax-post-fn)
+  (def ring-ajax-get-or-ws-handshake ajax-get-or-ws-handshake-fn)
+  (def ch-chsk                       ch-recv) ; ChannelSocket's receive channel
+  (def chsk-send!                    send-fn) ; ChannelSocket's send API fn
+  (def connected-uids                connected-uids) ; Watchable, read-only atom
+  )
