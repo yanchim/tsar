@@ -6,8 +6,6 @@
    [main.websocket :as ws]
    [muuntaja.core :as m]
    [org.httpkit.server :as hks]
-   [ring.middleware.keyword-params :refer [wrap-keyword-params]]
-   [ring.middleware.params :refer [wrap-params]]
    [reitit.coercion.spec :as rcs]
    [reitit.openapi :as openapi]
    [reitit.ring :as ring]
@@ -16,7 +14,12 @@
    [reitit.ring.middleware.muuntaja :as muuntaja]
    [reitit.ring.middleware.parameters :as parameters]
    [reitit.swagger :as swagger]
-   [reitit.swagger-ui :as swagger-ui]))
+   [reitit.swagger-ui :as swagger-ui]
+   [ring.middleware.cors :refer [wrap-cors]]
+   [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+   [ring.middleware.params :refer [wrap-params]]
+   [taoensso.sente :refer [sente-version]]
+   [taoensso.timbre :as timbre]))
 
 (defonce data (let [prefix "data/"]
                 {:default (str prefix "client.edn")
@@ -115,6 +118,10 @@
 
 (def ws-route
   ["/chat" {:name ::websocket
+            :middleware [#(wrap-cors
+                           %
+                           :access-control-allow-origin [#".*"]
+                           :access-control-allow-methods [:get :post])]
             :get {:summary "WebSocket for chatting"
                   :handler ws/ring-ajax-get-or-ws-handshake}
             :post {:summary "WebSocket for chatting"
@@ -150,24 +157,43 @@
                          ;; coercing request parameters
                          rrc/coerce-request-middleware]}})))
 
-(defn start [options]
-  (let [create-handler-fn #(create-ring-handler)
-        handler* (if (:dev options)
+;;;; Init stuff
+
+(defonce web-server (atom nil))         ; (fn stop [])
+
+(defn stop-web-server! []
+  (when-let [stop-fn @web-server] (stop-fn)))
+
+(defn start-web-server! [& [port dev]]
+  (stop-web-server!)
+  (let [port (or port 3000)           ; 0 => Choose any available port
+        create-handler-fn #(create-ring-handler)
+        handler* (if dev
                    (middlewares/reloading-ring-handler create-handler-fn)
-                   (create-handler-fn))]
-    (println "Server running on port" (:port options))
-    (hks/run-server handler* {:port (:port options) :join? false})))
+                   (create-handler-fn))
+        [port stop-fn]
+        (let [stop-fn (hks/run-server handler* {:port port :join? false})]
+          [(:local-port (meta stop-fn)) (fn stop-fn [] (stop-fn :timeout 100))])
+        uri (format "http://localhost:%s/" port)]
 
-(defn stop [_options]
-  (println :stop)
-  :stop)
+    (timbre/infof "HTTP server is running at `%s`" uri)
 
-(defn status [_options]
-  (println :status)
-  :status)
+    (reset! web-server stop-fn)))
 
-(defn- repl-test
-  "For repl test only."
-  [& {:keys [port]
-      :or   {port 3000}}]
-  (start {:dev true :port port}))
+(defn status! []
+  (let [status :not-implemented]
+    (println status)
+    status))
+
+(defn stop! [] (ws/stop-sente-router!) (stop-web-server!))
+
+(defn start! [& [port dev]]
+  (timbre/reportf "Sente version: %s" sente-version)
+  (timbre/reportf "Min log level: %s" @ws/min-log-level)
+  (ws/start-sente-router!)
+  (let [stop-fn (start-web-server! port dev)]
+    stop-fn))
+
+(comment
+  (start! nil true) ; Eval this at REPL to start server via REPL
+  )

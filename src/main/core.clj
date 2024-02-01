@@ -42,7 +42,7 @@
         "Actions:"
         "  start    Start a new server"
         "  stop     Stop an existing server"
-        "  status   Print a server's status"
+        "  status   Print server's status"
         ""
         "Please refer to the manual page for more information."]
        (str/join \newline)))
@@ -78,6 +78,6 @@
     (if exit-message
       (exit (if ok? 0 1) exit-message)
       (case action
-        "start"  (server/start options)
-        "stop"   (server/stop options)
-        "status" (server/status options)))))
+        "start"  (server/start! (:port options) (:dev options))
+        "stop"   (server/stop!)
+        "status" (server/status!)))))
