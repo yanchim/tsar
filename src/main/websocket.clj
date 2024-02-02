@@ -91,7 +91,7 @@
       (timbre/infof "User disconnected: user-id `%s`" uid)
       (timbre/infof "User disconnected: no user-id (user didn't have login session)"))))
 
-(defmethod -event-msg-handler :example/toggle-min-log-level
+(defmethod -event-msg-handler :chat/toggle-min-log-level
   [{:as ev-msg :keys [?reply-fn]}]
   (let [new-val
         (case @min-log-level
@@ -105,7 +105,7 @@
     (set-min-log-level! new-val)
     (?reply-fn          new-val)))
 
-(defmethod -event-msg-handler :example/toggle-bad-conn-rate
+(defmethod -event-msg-handler :chat/toggle-bad-conn-rate
   [{:as ev-msg :keys [?reply-fn]}]
   (let [new-val
         (case sente/*simulated-bad-conn-rate*
@@ -118,11 +118,17 @@
     (alter-var-root #'sente/*simulated-bad-conn-rate* (constantly new-val))
     (?reply-fn new-val)))
 
-(defmethod -event-msg-handler :example/connected-uids
+(defmethod -event-msg-handler :chat/connected-uids
   [{:as ev-msg :keys [?reply-fn]}]
   (let [uids @connected-uids]
     (timbre/infof "Connected uids: %s" uids)
     (?reply-fn                         uids)))
+
+(defmethod -event-msg-handler :chat/shout
+  [{:as ev-msg :keys [?data]}]
+  (let [{:keys [username msg timestamp]} ?data]
+    (timbre/infof "%s-%s-%s" username msg timestamp)
+    (broadcast! [:chat/broadcast "new"])))
 
 ;;;; Sente event router (our `event-msg-handler` loop)
 
