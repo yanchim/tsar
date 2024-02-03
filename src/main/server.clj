@@ -195,5 +195,4 @@
     stop-fn))
 
 (comment
-  (start! nil true) ; Eval this at REPL to start server via REPL
-  )
+  (start! nil true))

@@ -29,7 +29,10 @@
         (let [csrf-token "for-chat"]
           (prn "client" (-> ring-req :params :client-id))
           (prn "TOKEN (server)" csrf-token)
-          csrf-token))})))
+          csrf-token))
+      :user-id-fn
+      (fn [ring-req]
+        (-> ring-req :params :client-id))})))
 
 (let [{:keys [ch-recv send-fn connected-uids
               ajax-post-fn ajax-get-or-ws-handshake-fn]}
@@ -69,27 +72,22 @@
 (defmethod -event-msg-handler
   :default ; Default/fallback case (no other matching handler)
   [{:as ev-msg :keys [event id ?data ring-req ?reply-fn send-fn]}]
-  (let [session (:session ring-req)
-        uid     (:uid     session)]
+  (let [uid (-> ring-req :session :uid)]
     (timbre/debugf "Unhandled event: %s" event)
     (when ?reply-fn
       (?reply-fn {:unmatched-event-as-echoed-from-server event}))))
 
 (defmethod -event-msg-handler :chsk/uidport-open
   [{:as ev-msg :keys [ring-req]}]
-  (let [session (:session ring-req)
-        uid     (:uid     session)]
-    (if uid
-      (timbre/infof "User connected: user-id `%s`" uid)
-      (timbre/infof "User connected: no user-id (user didn't have login session)"))))
+  (if-let [uid (-> ring-req :session :uid)]
+    (timbre/infof "User connected: user-id `%s`" uid)
+    (timbre/infof "User connected: no user-id (user didn't have login session)")))
 
 (defmethod -event-msg-handler :chsk/uidport-close
   [{:as ev-msg :keys [ring-req]}]
-  (let [session (:session ring-req)
-        uid     (:uid     session)]
-    (if uid
-      (timbre/infof "User disconnected: user-id `%s`" uid)
-      (timbre/infof "User disconnected: no user-id (user didn't have login session)"))))
+  (if-let [uid (-> ring-req :session :uid)]
+    (timbre/infof "User disconnected: user-id `%s`" uid)
+    (timbre/infof "User disconnected: no user-id (user didn't have login session)")))
 
 (defmethod -event-msg-handler :chat/toggle-min-log-level
   [{:as ev-msg :keys [?reply-fn]}]
