@@ -29,31 +29,34 @@
         (let [csrf-token "for-chat"]
           (prn "client" (-> ring-req :params :client-id))
           (prn "TOKEN (server)" csrf-token)
-          csrf-token))
-      :user-id-fn
-      (fn [ring-req]
-        (-> ring-req :params :client-id))})))
+          csrf-token))})))
 
 (let [{:keys [ch-recv send-fn connected-uids
               ajax-post-fn ajax-get-or-ws-handshake-fn]}
       chsk-server]
 
-  (def ring-ajax-post                ajax-post-fn)
-  (def ring-ajax-get-or-ws-handshake ajax-get-or-ws-handshake-fn)
-  (def ch-chsk                       ch-recv) ; ChannelSocket's receive channel
-  (def chsk-send!                    send-fn) ; ChannelSocket's send API fn
-  (def connected-uids                connected-uids) ; Watchable, read-only atom
+  (defonce ring-ajax-post                ajax-post-fn)
+  (defonce ring-ajax-get-or-ws-handshake ajax-get-or-ws-handshake-fn)
+  (defonce ch-chsk                       ch-recv) ; ChannelSocket's receive channel
+  (defonce chsk-send!                    send-fn) ; ChannelSocket's send API fn
+  (defonce connected-uids                connected-uids) ; Watchable, read-only atom
   )
+
+;; We can watch this atom for changes
+(add-watch connected-uids :connected-uids
+  (fn [_ _ old new]
+    (when (not= old new)
+      (timbre/infof "Connected uids change: %s" new))))
 
 ;;;; Some server>user async push
 
 (defn broadcast!
   "Pushes given event to all connected users."
-  [event]
-  (let [all-uids (:any connected-uids)]
+  [message]
+  (let [all-uids (:any @connected-uids)]
     (doseq [uid all-uids]
       (timbre/debugf "Broadcasting server>user to %s uids" (count all-uids))
-      (chsk-send! uid event))))
+      (chsk-send! uid message))))
 
 ;;;; Sente event handlers
 
@@ -126,7 +129,9 @@
   [{:as ev-msg :keys [?data]}]
   (let [{:keys [username msg timestamp]} ?data]
     (timbre/infof "%s-%s-%s" username msg timestamp)
-    (broadcast! [:chat/broadcast "new"])))
+    (broadcast! [:chat/broadcast {:username username
+                                  :msg msg
+                                  :timestamp timestamp}])))
 
 ;;;; Sente event router (our `event-msg-handler` loop)
 
