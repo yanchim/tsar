@@ -121,10 +121,16 @@
             :middleware [#(wrap-cors
                            %
                            :access-control-allow-origin [#".*"]
+                           :access-control-allow-headers #{"accept"
+                                                           "accept-encoding"
+                                                           "accept-language"
+                                                           "authorization"
+                                                           "content-type"
+                                                           "origin"}
                            :access-control-allow-methods [:get :post])]
-            :get {:summary "WebSocket for chatting"
+            :get {:summary "WebSocket for chat"
                   :handler ws/ring-ajax-get-or-ws-handshake}
-            :post {:summary "WebSocket for chatting"
+            :post {:summary "WebSocket for chat"
                    :handler ws/ring-ajax-post}}])
 
 (defn- create-ring-handler []
