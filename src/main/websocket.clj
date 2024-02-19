@@ -18,22 +18,17 @@
 ;; Serialization format, must use same val for client + server:
 (let [packer :edn ; Default packer, a good choice in most cases
       ;; (sente-transit/get-transit-packer) ; Needs Transit dep
-      ]
-
-  (defonce chsk-server
-    (sente/make-channel-socket-server!
-     (get-sch-adapter)
-     {:packer packer
-      :csrf-token-fn
-      (fn [ring-req]
-        (let [csrf-token "for-chat"]
-          (prn "client" (-> ring-req :params :client-id))
-          (prn "TOKEN (server)" csrf-token)
-          csrf-token))})))
-
-(let [{:keys [ch-recv send-fn connected-uids
+      {:keys [ch-recv send-fn connected-uids
               ajax-post-fn ajax-get-or-ws-handshake-fn]}
-      chsk-server]
+      (sente/make-channel-socket-server!
+       (get-sch-adapter)
+       {:packer packer
+        :csrf-token-fn
+        (fn [ring-req]
+          (let [csrf-token "for-chat"]
+            (prn "client" (-> ring-req :params :client-id))
+            (prn "TOKEN (server)" csrf-token)
+            csrf-token))})]
 
   (defonce ring-ajax-post                ajax-post-fn)
   (defonce ring-ajax-get-or-ws-handshake ajax-get-or-ws-handshake-fn)
