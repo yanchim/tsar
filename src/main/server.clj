@@ -2,6 +2,7 @@
   (:require
    [clojure.edn :as edn]
    [clojure.spec.alpha :as s]
+   [main.db :as db]
    [main.middlewares :as middlewares]
    [main.websocket :as ws]
    [muuntaja.core :as m]
@@ -18,6 +19,7 @@
    [ring.middleware.cors :refer [wrap-cors]]
    [ring.middleware.keyword-params :refer [wrap-keyword-params]]
    [ring.middleware.params :refer [wrap-params]]
+   [spec-tools.core :as st]
    [taoensso.sente :refer [sente-version]]
    [taoensso.timbre :as timbre]))
 
@@ -34,6 +36,22 @@
 
 (s/def :sub/request (s/keys :req-un [:sub/name]
                             :opt-un [:sub/mobile :sub/cn]))
+
+(s/def :chat-history/limit (st/spec {:spec int?
+                                     :name "Limit parameter"
+                                     :json-schema/default 50}))
+
+(s/def :chat-history/request (s/keys :opt-un [:chat-history/limit]))
+
+(s/def :chat-history/id int?)
+(s/def :chat-history/name string?)
+(s/def :chat-history/content string?)
+(s/def :chat-history/inserted_at inst?)
+
+(s/def :chat-history/response (s/coll-of
+                               (s/keys :req-un
+                                       [:chat-history/id :chat-history/name
+                                        :chat-history/content :chat-history/inserted_at])))
 
 (defn- subscribe-get [request]
   (let [{:keys [name mobile cn]} (-> request :parameters :query)
@@ -87,6 +105,13 @@
                          outbound))
                      outbounds)))})))
 
+(defn chat-history-post [req]
+  (let [{:keys [limit]} (-> req :parameters :body)]
+    {:status 200
+     :body (-> limit
+               (db/db->message limit)
+               reverse)}))
+
 (defn- ping [_]
   {:status 200
    :body {:hello "world"}})
@@ -113,32 +138,37 @@
                         :handler    subscribe-get}
                  :post {:summary    "Get subscribe json with spec body parameters"
                         :parameters {:body :sub/request}
-                        :responses  {200 {}}
+                        :responses  {200 {:body {}}}
                         :handler subscribe-post}}])
 
-(def ws-route
-  ["/chat" {:name ::websocket
-            :middleware [#(wrap-cors
-                           %
-                           :access-control-allow-origin [#".*"]
-                           :access-control-allow-headers #{"accept"
-                                                           "accept-encoding"
-                                                           "accept-language"
-                                                           "authorization"
-                                                           "content-type"
-                                                           "origin"}
-                           :access-control-allow-methods [:get :post])]
-            :get {:summary "WebSocket for chat"
-                  :handler ws/ring-ajax-get-or-ws-handshake}
-            :post {:summary "WebSocket for chat"
-                   :handler ws/ring-ajax-post}}])
+(def chat-routes
+  [["/chat" {:name ::websocket
+             :middleware [#(wrap-cors
+                            %
+                            :access-control-allow-origin [#".*"]
+                            :access-control-allow-headers #{"accept"
+                                                            "accept-encoding"
+                                                            "accept-language"
+                                                            "authorization"
+                                                            "content-type"
+                                                            "origin"}
+                            :access-control-allow-methods [:get :post])]
+             :get {:summary "WebSocket for chat"
+                   :handler ws/ring-ajax-get-or-ws-handshake}
+             :post {:summary "WebSocket for chat"
+                    :handler ws/ring-ajax-post}}]
+   ["/chat-history" {:name ::chat-history
+                     :post {:summary "Chat history"
+                            :parameters {:body :chat-history/request}
+                            :responses {200 {:body :chat-history/response}}
+                            :handler chat-history-post}}]])
 
 (defn- create-ring-handler []
   (ring/ring-handler
    (ring/router
     [root-routes
      subsribe-routes
-     ws-route]
+     chat-routes]
     ;; router data affecting all routes
     {:data {:coercion   rcs/coercion
             :muuntaja   m/instance

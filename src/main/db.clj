@@ -1,5 +1,6 @@
 (ns main.db
   (:require [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [honey.sql :as sql]
             [honey.sql.helpers :as sqlh]))
 
@@ -12,33 +13,21 @@
 (def ^:private ds (jdbc/get-datasource db))
 
 (defn- sql-execute! [statement]
-  (jdbc/execute! ds statement))
+  (jdbc/execute! ds statement {:builder-fn rs/as-unqualified-maps}))
 
-(defn- message-> [& [limit]]
+(defn db->message [& [limit]]
   (-> (sqlh/select :*)
       (sqlh/from :message)
       (sqlh/limit (or limit 50))
       (sql/format)
       (sql-execute!)))
 
-(defn- ->message [name content timestamp]
+(defn- message->db [name content timestamp]
   (-> (sqlh/insert-into :message)
       (sqlh/columns :name :content :inserted_at)
       (sqlh/values (vector [name content timestamp]))
       (sql/format)
       (sql-execute!)))
-
-(defn- message->map-vector
-  "Parse `query` result to map."
-  [query]
-  (reduce
-   #(conj %1
-          {:id (:message/id %2)
-           :name (:message/name %2)
-           :content (:message/content %2)
-           :inserted_at (.toLocalDateTime (:message/inserted_at %2))})
-   []
-   query))
 
 (comment
   (-> (sqlh/create-table :message :if-not-exists)
@@ -73,14 +62,8 @@
       (sql/format)
       (sql-execute!))
 
-  (def all-messages
-    "All messages in table `message`."
-    (-> (sqlh/select :*)
-        (sqlh/from :message)
-        (sql/format)
-        (sql-execute!)))
-
-  (message->map-vector all-messages)
+  (-> 1
+      (db->message))
 
 ;; For test only.
   )
