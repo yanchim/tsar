@@ -21,7 +21,7 @@
    [ring.middleware.params :refer [wrap-params]]
    [spec-tools.core :as st]
    [taoensso.sente :refer [sente-version]]
-   [taoensso.timbre :as timbre]))
+   [taoensso.telemere :as t]))
 
 (defonce data (let [prefix "data/"]
                 {:default (str prefix "client.edn")
@@ -212,7 +212,8 @@
           [(:local-port (meta stop-fn)) (fn stop-fn [] (stop-fn :timeout 100))])
         uri (format "http://localhost:%s/" port)]
 
-    (timbre/infof "HTTP server is running at `%s`" uri)
+    (t/add-handler! ::logfile (t/handler:file {:path "logs/app.log"}))
+    (t/log! :info ["HTTP server is running at" uri])
 
     (reset! web-server stop-fn)))
 
@@ -224,8 +225,8 @@
 (defn stop! [] (ws/stop-sente-router!) (stop-web-server!))
 
 (defn start! [& [port dev]]
-  (timbre/reportf "Sente version: %s" sente-version)
-  (timbre/reportf "Min log level: %s" @ws/min-log-level)
+  (t/log! :report ["Sente version: " sente-version])
+  (t/log! :report ["Min log level: " @ws/min-log-level])
   (ws/start-sente-router!)
   (let [stop-fn (start-web-server! port dev)]
     stop-fn))

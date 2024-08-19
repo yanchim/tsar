@@ -1,7 +1,9 @@
 (ns main.websocket
-  (:require [taoensso.sente :as sente]
-            [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
-            [taoensso.timbre :as timbre]))
+  (:require
+   [main.db :as db]
+   [taoensso.sente :as sente]
+   [taoensso.sente.server-adapters.http-kit :refer [get-sch-adapter]]
+   [taoensso.timbre :as timbre]))
 
 ;;;; Logging config
 
@@ -39,9 +41,9 @@
 
 ;; We can watch this atom for changes
 (add-watch connected-uids :connected-uids
-  (fn [_ _ old new]
-    (when (not= old new)
-      (timbre/infof "Connected uids change: %s" new))))
+           (fn [_ _ old new]
+             (when (not= old new)
+               (timbre/infof "Connected uids change: %s" new))))
 
 ;;;; Some server>user async push
 
@@ -74,6 +76,15 @@
     (timbre/debugf "Unhandled event: %s" event)
     (when ?reply-fn
       (?reply-fn {:unmatched-event-as-echoed-from-server event}))))
+
+(comment
+  (doseq [message (-> (db/db->message) reverse)]
+    (println "message" message)
+    (broadcast! [:chat/broadcast
+                 (let [{:keys [name content inserted_at]} message]
+                   {:username name
+                    :msg content
+                    :timestamp inserted_at})])))
 
 (defmethod -event-msg-handler :chsk/uidport-open
   [{:as ev-msg :keys [ring-req]}]

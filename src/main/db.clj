@@ -22,7 +22,7 @@
       (sql/format)
       (sql-execute!)))
 
-(defn- message->db [name content timestamp]
+(defn message->db [name content timestamp]
   (-> (sqlh/insert-into :message)
       (sqlh/columns :name :content :inserted_at)
       (sqlh/values (vector [name content timestamp]))
@@ -30,6 +30,17 @@
       (sql-execute!)))
 
 (comment
+  (def ^:private hx-db
+    {:dbtype "postgresql"
+     :dbname "wuhuihuaxia_dev"
+     :host "23.105.199.155"
+     :user "aiguozhe"
+     :password "AiGuoZhe"})
+
+  (def ^:private hx-ds (jdbc/get-datasource hx-db))
+
+  (jdbc/execute! hx-ds ["SELECT * FROM messages"])
+
   (-> (sqlh/create-table :message :if-not-exists)
       (sqlh/with-columns
         [:id :serial :primary-key [:not nil]]
